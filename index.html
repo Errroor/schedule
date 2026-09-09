@@ -1,0 +1,650 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Моё расписание — осень 2026/2027</title>
+
+  <meta name="theme-color" content="#eaf3f8" />
+  <meta name="application-name" content="Расписание" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+  <style>
+    :root{
+      --grid:#c9dbe7;
+      --head:#eaf3f8;
+      --week:#e6f0f6;
+      --lecture:#fff8bd;
+      --seminar:#dff7d9;
+      --lab:#f4d7ee;
+      --extra:#1457ff;
+      --today:#ffe7a3;
+      --now:#ffd27a;
+      --text:#111827;
+      --muted:#5f6b76;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:Arial, Helvetica, sans-serif;
+      color:var(--text);
+      background:#fff;
+    }
+    .page{
+      width:min(1500px, 100%);
+      margin:0 auto;
+      padding:10px 10px 28px;
+    }
+    h1{
+      margin:0 0 10px;
+      text-align:center;
+      font-size:18px;
+      line-height:1.35;
+    }
+    .toolbar{
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+      align-items:center;
+      justify-content:center;
+      margin:0 0 10px;
+    }
+    button{
+      border:1px solid #9fb7c8;
+      background:#fff;
+      border-radius:9px;
+      padding:8px 12px;
+      cursor:pointer;
+      font-size:14px;
+    }
+    button:hover{background:#f4f8fb}
+    button.active{
+      background:#17324d;
+      color:#fff;
+      border-color:#17324d;
+    }
+
+    #installBtn{
+      display:none;
+    }
+    #installBtn.show{
+      display:inline-block;
+    }
+    .offline-badge{
+      display:none;
+      margin-left:6px;
+      padding:2px 7px;
+      border-radius:999px;
+      background:#eef4f7;
+      border:1px solid #c9dbe7;
+      font-size:11px;
+      color:#425466;
+      vertical-align:middle;
+    }
+    .offline-badge.show{
+      display:inline-block;
+    }
+    .status{
+      text-align:center;
+      color:var(--muted);
+      margin:0 0 10px;
+      font-size:13px;
+    }
+    .table-wrap{
+      overflow-x:auto;
+      border:1px solid var(--grid);
+      border-radius:8px;
+    }
+    table{
+      width:100%;
+      min-width:1180px;
+      border-collapse:collapse;
+      table-layout:fixed;
+      background:white;
+    }
+    th,td{
+      border:1px solid var(--grid);
+      padding:5px 7px;
+      vertical-align:middle;
+      text-align:center;
+      font-size:13px;
+      line-height:1.18;
+      height:46px;
+    }
+    thead th{
+      background:var(--head);
+      font-weight:700;
+      position:sticky;
+      top:0;
+      z-index:2;
+    }
+    .week-col{width:72px}
+    .time-col{width:102px}
+    .week-number{
+      background:var(--week);
+      font-weight:700;
+      font-size:20px;
+    }
+    .time{
+      background:#f6fafc;
+      font-weight:700;
+      white-space:nowrap;
+    }
+    td.lecture{background:var(--lecture)}
+    td.seminar{background:var(--seminar)}
+    td.lab{background:var(--lab)}
+    td.extra{
+      background:#dff3ff;
+      color:#111827;
+      font-weight:400;
+      text-align:center;
+      padding:5px 7px;
+    }
+    td.today, th.today{box-shadow:none}
+    td.now{
+      outline:3px solid var(--now);
+      outline-offset:-3px;
+      font-weight:400;
+    }
+    .subject{font-weight:400}
+    .meta{font-size:12px; margin-top:2px}
+    .legend{
+      display:flex;
+      flex-wrap:wrap;
+      justify-content:center;
+      gap:14px;
+      margin-top:12px;
+      font-size:13px;
+    }
+    .legend span{display:inline-flex; align-items:center; gap:6px}
+    .swatch{
+      width:18px;
+      height:13px;
+      border:1px solid #c7c7c7;
+      display:inline-block;
+      border-radius:3px;
+    }
+    .swatch.lecture{background:var(--lecture)}
+    .swatch.seminar{background:var(--seminar)}
+    .swatch.lab{background:var(--lab)}
+    .swatch.extra{background:#dff3ff; border:1px solid #c7c7c7}
+    .foot{
+      margin-top:12px;
+      text-align:center;
+      font-size:12px;
+      color:var(--muted);
+    }
+
+    /* Толстое разделение между неделями */
+    tr.week-separator > td{
+      border-top:4px solid #8eaec4 !important;
+    }
+
+    /* Автоматический адаптив под Android / мобильные экраны */
+    @media (max-width:900px){
+      .page{
+        padding:6px 4px 18px;
+      }
+      h1{
+        font-size:14px;
+        line-height:1.25;
+        margin-bottom:8px;
+      }
+      .toolbar{
+        gap:6px;
+        margin-bottom:8px;
+      }
+      button{
+        font-size:13px;
+        padding:8px 10px;
+        min-height:40px;
+      }
+  
+    #installBtn{
+      display:none;
+    }
+    #installBtn.show{
+      display:inline-block;
+    }
+    .offline-badge{
+      display:none;
+      margin-left:6px;
+      padding:2px 7px;
+      border-radius:999px;
+      background:#eef4f7;
+      border:1px solid #c9dbe7;
+      font-size:11px;
+      color:#425466;
+      vertical-align:middle;
+    }
+    .offline-badge.show{
+      display:inline-block;
+    }
+    .status{
+        font-size:12px;
+        margin-bottom:8px;
+      }
+      .table-wrap{
+        overflow-x:auto;
+        -webkit-overflow-scrolling:touch;
+        border-radius:6px;
+      }
+      table{
+        min-width:980px;
+      }
+      th,td{
+        font-size:11px;
+        line-height:1.12;
+        padding:4px 5px;
+        height:42px;
+      }
+      .week-col{width:52px}
+      .time-col{width:78px}
+      .week-number{
+        font-size:16px;
+      }
+      .meta{
+        font-size:10px;
+      }
+      .legend{
+        gap:10px;
+        font-size:12px;
+      }
+      .foot{
+        font-size:11px;
+      }
+    }
+
+    @media (max-width:700px){
+      .page{padding:6px 3px 16px}
+      h1{font-size:13px}
+      table{min-width:920px}
+      th,td{font-size:10px; padding:3px 4px; height:40px}
+      .week-col{width:46px}
+      .time-col{width:70px}
+      .week-number{font-size:15px}
+      .meta{font-size:9px}
+      .toolbar{
+        justify-content:stretch;
+      }
+      .toolbar button{
+        flex:1 1 calc(50% - 6px);
+      }
+    }
+
+    @media (hover:none) and (pointer:coarse){
+      button{
+        min-height:42px;
+      }
+      .table-wrap{
+        overflow-x:auto;
+        -webkit-overflow-scrolling:touch;
+      }
+
+      /* На телефоне первые две колонки остаются на месте при прокрутке. */
+      tbody .week-number{
+        position:sticky;
+        left:0;
+        z-index:3;
+      }
+      tbody .time{
+        position:sticky;
+        left:46px;
+        z-index:3;
+      }
+      thead .week-col{
+        position:sticky;
+        left:0;
+        z-index:5;
+      }
+      thead .time-col{
+        position:sticky;
+        left:46px;
+        z-index:5;
+      }
+    }
+
+    @media print{
+      .toolbar,.status,.foot{display:none!important}
+      .page{width:100%; padding:0}
+      .table-wrap{overflow:visible; border:0}
+      table{min-width:0; font-size:9px}
+      th,td{font-size:9px; padding:3px; height:36px}
+      thead th{position:static}
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+  <h1>Расписание постоянное, осенний семестр 2026/2027 г. (начало: 15.09.2026 — окончание: 21.12.2026)</h1>
+
+  <div class="toolbar">
+    <button data-filter="all" class="active">Обе недели</button>
+    <button data-filter="1">1 неделя</button>
+    <button data-filter="2">2 неделя</button>
+    <button id="currentBtn">Текущая неделя</button>
+    <button id="resetBtn">Сбросить</button>
+    <button id="installBtn">Установить приложение</button>
+  </div>
+  <div class="status"><span id="status"></span><span id="offlineBadge" class="offline-badge">офлайн</span></div>
+
+  <div class="table-wrap">
+    <table id="scheduleTable">
+      <thead>
+        <tr>
+          <th class="week-col" rowspan="2">нед</th>
+          <th class="time-col" rowspan="2">Время</th>
+          <th colspan="7">Занятия</th>
+        </tr>
+        <tr id="daysHead"></tr>
+      </thead>
+      <tbody id="body"></tbody>
+    </table>
+  </div>
+
+  <div class="legend">
+    <span><i class="swatch lecture"></i>лекция</span>
+    <span><i class="swatch seminar"></i>семинар / практика</span>
+    <span><i class="swatch lab"></i>лабораторная</span>
+    <span><i class="swatch extra"></i>доп. занятие</span>
+  </div>
+
+  <div class="foot">Страница полностью автономная: достаточно одного файла <b>index.html</b>.</div>
+</div>
+
+<script>
+const days = [
+  ["mon","понедельник"],
+  ["tue","вторник"],
+  ["wed","среда"],
+  ["thu","четверг"],
+  ["fri","пятница"],
+  ["sat","суббота"],
+  ["sun","воскресенье"],
+];
+
+const times = [
+  ["08:00","09:35","8.00 - 9.35"],
+  ["09:50","11:25","9.50-11.25"],
+  ["11:40","13:15","11.40-13.15"],
+  ["14:00","15:35","14.00-15.35"],
+  ["15:50","17:25","15.50-17.25"],
+  ["17:40","19:15","17.40-19.15"],
+  ["19:25","21:00","19.25-21.00"],
+];
+
+const S = (subject, type, teacher="", room="") => ({subject,type,teacher,room});
+const X = (subject, exactTime="", teacher="") => ({subject, exactTime, teacher, type:"extra"});
+
+// Данные с присланного изображения.
+// Ключ: "неделя-день-индекс_времени".
+const lessons = {
+  // 1 неделя
+  "1-tue-1": S("Обработка и анализ данных","lecture","Ратманова И.Д.","Б014"),
+  "1-thu-1": S("Технологии гибридных суперкомпьютерных вычислений","seminar","Чернышева Л.П.","Б326"),
+
+  "1-tue-2": S("Параллельные методы решения задач","seminar","Чернышева Л.П.","Б326"),
+  "1-wed-2": S("Упр. жизн. циклом ПО","lab","Садыков А.М.","Б306"),
+  "1-thu-2": S("Параллельные методы решения задач","lecture","Чернышева Л.П.","Б027"),
+  "1-fri-2": S("Методы машинного обучения","lab","Кокин В.М.","Б324"),
+
+  "1-mon-3": S("Упр. жизн. циклом ПО","seminar","Садыков А.М.","Б014"),
+  "1-wed-3": S("Упр. жизн. циклом ПО","lecture","Садыков А.М.","Б310"),
+  "1-fri-3": S("Методы машинного обучения","lecture","Кокин В.М.","Б318"),
+
+  "1-mon-4": S("Параллельные методы решения задач","lab","Чернышева Л.П.","Б324"),
+  "1-fri-4": S("Обработка и анализ данных","lab","Ратманова И.Д.","Б306"),
+
+  "1-wed-4": X("Теоретическая и практическая грамматика","17:30","Ганина В.В."),
+  "1-mon-5": X("Практика устной речи","18:30","Кузьмина Р.В."),
+  "1-thu-5": X("Функциональная стилистика русского языка","18:30","Здорикова Ю.Н."),
+  "1-wed-5": X("Лексикология английского языка","19:00","Ганина В.В."),
+
+  // 2 неделя
+  "2-tue-0": S("Технологии гибридных суперкомпьютерных вычислений","lab","Чернышева Л.П.","Б331(2)"),
+
+  "2-tue-1": S("Обработка и анализ данных","seminar","Ратманова И.Д.","Б014"),
+  "2-wed-1": S("Мет. научн. исслед.","lab","Пантелеев Е.Р.","Б306"),
+
+  "2-wed-2": S("Мет. научн. исслед.","lecture","Пантелеев Е.Р.","Б326"),
+  "2-thu-2": S("Технологии гибридных суперкомпьютерных вычислений","lecture","Чернышева Л.П.","Б310"),
+
+  "2-wed-3": S("Методы машинного обучения","lab","Кокин В.М.","Б324"),
+  "2-thu-3": S("Мет. научн. исслед.","seminar","Пантелеев Е.Р.","Б310"),
+
+  "2-wed-4": X("Теоретическая и практическая грамматика","17:30","Ганина В.В."),
+  "2-mon-5": X("Практика устной речи","18:30","Кузьмина Р.В."),
+  "2-thu-5": X("Функциональная стилистика русского языка","18:30","Здорикова Ю.Н."),
+  "2-wed-5": X("Лексикология английского языка","19:00","Ганина В.В."),
+};
+
+const body = document.getElementById("body");
+const daysHead = document.getElementById("daysHead");
+const status = document.getElementById("status");
+
+for (const [key,label] of days) {
+  const th = document.createElement("th");
+  th.textContent = label;
+  th.dataset.day = key;
+  daysHead.appendChild(th);
+}
+
+function typeLabel(type){
+  return type === "lecture" ? "лек."
+       : type === "seminar" ? "сем."
+       : type === "lab" ? "лаб."
+       : "";
+}
+
+function render(filter="all"){
+  body.innerHTML = "";
+  const weeks = filter === "all" ? [1,2] : [Number(filter)];
+
+  for (const week of weeks) {
+    times.forEach((t, ti) => {
+      const tr = document.createElement("tr");
+      tr.dataset.week = String(week);
+      tr.dataset.timeIndex = String(ti);
+
+      if (ti === 0 && week !== weeks[0]) {
+        tr.classList.add("week-separator");
+      }
+
+      if (ti === 0) {
+        const w = document.createElement("td");
+        w.className = "week-number";
+        w.rowSpan = times.length;
+        w.textContent = week;
+        tr.appendChild(w);
+      }
+
+      const time = document.createElement("td");
+      time.className = "time";
+      time.textContent = t[2];
+      tr.appendChild(time);
+
+      for (const [dayKey] of days) {
+        const td = document.createElement("td");
+        td.dataset.day = dayKey;
+        td.dataset.week = String(week);
+        td.dataset.timeIndex = String(ti);
+
+        const item = lessons[`${week}-${dayKey}-${ti}`];
+        if (item) {
+          td.classList.add(item.type);
+          if (item.type === "extra") {
+            const extraMeta = [item.exactTime, item.teacher].filter(Boolean).join(" · ");
+            td.innerHTML = `<div class="subject">${item.subject}</div>
+                            <div class="meta">${extraMeta}</div>`;
+          } else {
+            td.innerHTML = `<div class="subject">${item.subject} ${typeLabel(item.type)}</div>
+                            <div class="meta">${item.teacher}${item.room ? " " + item.room : ""}</div>`;
+          }
+        }
+        tr.appendChild(td);
+      }
+      body.appendChild(tr);
+    });
+  }
+  markTodayAndNow();
+}
+
+function mondayOf(date){
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const day = d.getDay(); // 0 вс ... 6 сб
+  const diff = day === 0 ? -6 : 1-day;
+  d.setDate(d.getDate()+diff);
+  d.setHours(0,0,0,0);
+  return d;
+}
+
+function currentScheduleWeek(date=new Date()){
+  const semesterStart = new Date(2026,8,15); // 15.09.2026, вторник 2 недели
+  const semesterEnd = new Date(2026,11,21,23,59,59);
+  if (date < semesterStart || date > semesterEnd) return null;
+
+  const anchorMonday = mondayOf(semesterStart);
+  const currentMonday = mondayOf(date);
+  const diffWeeks = Math.floor((currentMonday-anchorMonday)/(7*24*60*60*1000));
+
+  // Неделя старта — №2, затем чередование 1/2.
+  return diffWeeks % 2 === 0 ? 2 : 1;
+}
+
+function jsDayToKey(day){
+  return ["sun","mon","tue","wed","thu","fri","sat"][day];
+}
+
+function minutes(hm){
+  const [h,m] = hm.split(":").map(Number);
+  return h*60+m;
+}
+
+function markTodayAndNow(){
+  document.querySelectorAll(".today,.now").forEach(el => el.classList.remove("today","now"));
+
+  const now = new Date();
+  const dayKey = jsDayToKey(now.getDay());
+  const week = currentScheduleWeek(now);
+
+  document.querySelectorAll(`[data-day="${dayKey}"]`).forEach(el => el.classList.add("today"));
+
+  if (!week) return;
+  const nowMin = now.getHours()*60 + now.getMinutes();
+  const ti = times.findIndex(([start,end]) => nowMin >= minutes(start) && nowMin <= minutes(end));
+  if (ti < 0) return;
+
+  const cell = document.querySelector(`td[data-week="${week}"][data-day="${dayKey}"][data-time-index="${ti}"]`);
+  if (cell && cell.textContent.trim()) cell.classList.add("now");
+}
+
+function setFilter(value){
+  document.querySelectorAll("button[data-filter]").forEach(b => b.classList.toggle("active", b.dataset.filter === value));
+  render(value);
+}
+
+document.querySelectorAll("button[data-filter]").forEach(btn => {
+  btn.addEventListener("click", () => setFilter(btn.dataset.filter));
+});
+
+document.getElementById("currentBtn").addEventListener("click", () => {
+  const week = currentScheduleWeek(new Date());
+  if (week) {
+    setFilter(String(week));
+    status.textContent = `Сейчас ${week}-я учебная неделя.`;
+    requestAnimationFrame(() => requestAnimationFrame(scrollToToday));
+  } else {
+    status.textContent = "Сейчас дата вне указанного периода семестра.";
+  }
+});
+
+document.getElementById("resetBtn").addEventListener("click", () => {
+  status.textContent = "";
+  setFilter("all");
+});
+
+function scrollToToday(){
+  const wrap = document.querySelector(".table-wrap");
+  const dayKey = jsDayToKey(new Date().getDay());
+  const dayHeader = document.querySelector(`th[data-day="${dayKey}"]`);
+  if (!wrap || !dayHeader) return;
+
+  // Оставляем слева видимыми колонки "нед" и "Время".
+  const leftOffset = 170;
+  const target = Math.max(0, dayHeader.offsetLeft - leftOffset);
+  wrap.scrollTo({ left: target, behavior: "smooth" });
+}
+
+function openCurrentWeekAndDay(){
+  const now = new Date();
+  const cw = currentScheduleWeek(now);
+
+  if (cw) {
+    status.textContent = `Сейчас ${cw}-я учебная неделя.`;
+    setFilter(String(cw));
+  } else {
+    status.textContent = "До начала семестра / после его окончания.";
+    setFilter("all");
+  }
+
+  requestAnimationFrame(() => {
+    requestAnimationFrame(scrollToToday);
+  });
+}
+
+// При открытии страницы сразу показываем нужную неделю и сегодняшний день.
+openCurrentWeekAndDay();
+
+// Обновляем подсветку раз в минуту.
+setInterval(markTodayAndNow, 60_000);
+
+// PWA: установка, офлайн-кэш и запуск с главного экрана.
+let deferredInstallPrompt = null;
+const installBtn = document.getElementById("installBtn");
+const offlineBadge = document.getElementById("offlineBadge");
+
+function updateOnlineState(){
+  offlineBadge.classList.toggle("show", !navigator.onLine);
+}
+
+window.addEventListener("online", updateOnlineState);
+window.addEventListener("offline", updateOnlineState);
+updateOnlineState();
+
+window.addEventListener("beforeinstallprompt", (event) => {
+  event.preventDefault();
+  deferredInstallPrompt = event;
+  installBtn.classList.add("show");
+});
+
+installBtn.addEventListener("click", async () => {
+  if (!deferredInstallPrompt) return;
+  deferredInstallPrompt.prompt();
+  await deferredInstallPrompt.userChoice;
+  deferredInstallPrompt = null;
+  installBtn.classList.remove("show");
+});
+
+window.addEventListener("appinstalled", () => {
+  deferredInstallPrompt = null;
+  installBtn.classList.remove("show");
+});
+
+if (window.matchMedia("(display-mode: standalone)").matches) {
+  installBtn.classList.remove("show");
+}
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js").catch((error) => {
+      console.warn("Service Worker не зарегистрирован:", error);
+    });
+  });
+}
+
+</script>
+</body>
+</html>
