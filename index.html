@@ -87,6 +87,15 @@
     .offline-badge.show{
       display:inline-block;
     }
+
+    .save-state{
+      display:inline-block;
+      margin-left:8px;
+      font-size:11px;
+      color:#5f6b76;
+    }
+    .save-state.ok{color:#355f3a}
+    .save-state.error{color:#9b2c2c}
     .status{
       text-align:center;
       color:var(--muted);
@@ -246,6 +255,15 @@
     .offline-badge.show{
       display:inline-block;
     }
+
+    .save-state{
+      display:inline-block;
+      margin-left:8px;
+      font-size:11px;
+      color:#5f6b76;
+    }
+    .save-state.ok{color:#355f3a}
+    .save-state.error{color:#9b2c2c}
     .status{
         font-size:12px;
         margin-bottom:8px;
@@ -357,7 +375,7 @@
     <button id="editBtn">Переставить занятия</button>
     <button id="restoreScheduleBtn">Вернуть исходное расписание</button>
   </div>
-  <div class="status"><span id="status"></span><span id="offlineBadge" class="offline-badge">офлайн</span></div>
+  <div class="status"><span id="status"></span><span id="offlineBadge" class="offline-badge">офлайн</span><span id="saveState" class="save-state"></span></div>
 
   <div class="table-wrap">
     <table id="scheduleTable">
@@ -447,26 +465,88 @@ const defaultLessons = {
   "2-wed-5": X("Лексикология английского языка","19:00","Ганина В.В."),
 };
 
-const STORAGE_KEY = "schedule-custom-lessons-v2";
+const STORAGE_KEY = "schedule-layout-v1";
+const LEGACY_STORAGE_KEYS = ["schedule-custom-lessons-v2", "schedule-custom-lessons-v1"];
 
 function cloneLessons(source){
   return JSON.parse(JSON.stringify(source));
 }
 
-function loadLessons(){
+function storageAvailable(){
   try{
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if(saved) return JSON.parse(saved);
-  }catch(e){}
+    const testKey = "__schedule_storage_test__";
+    localStorage.setItem(testKey, "1");
+    localStorage.removeItem(testKey);
+    return true;
+  }catch(e){
+    return false;
+  }
+}
+
+const canUseStorage = storageAvailable();
+
+function loadLessons(){
+  if(!canUseStorage) return cloneLessons(defaultLessons);
+
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw){
+      const parsed = JSON.parse(raw);
+
+      // New format: { lessons: {...}, savedAt: "..." }
+      if(parsed && parsed.lessons && typeof parsed.lessons === "object"){
+        return parsed.lessons;
+      }
+
+      // Safety fallback if an object itself was stored.
+      if(parsed && typeof parsed === "object"){
+        return parsed;
+      }
+    }
+
+    // Migrate data from previous versions, if present.
+    for(const key of LEGACY_STORAGE_KEYS){
+      const legacy = localStorage.getItem(key);
+      if(!legacy) continue;
+
+      const parsed = JSON.parse(legacy);
+      if(parsed && typeof parsed === "object"){
+        const lessonsData = parsed.lessons && typeof parsed.lessons === "object"
+          ? parsed.lessons
+          : parsed;
+
+        localStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify({lessons: lessonsData, savedAt: new Date().toISOString()})
+        );
+        return lessonsData;
+      }
+    }
+  }catch(e){
+    console.warn("Не удалось прочитать сохранённое расположение:", e);
+  }
+
   return cloneLessons(defaultLessons);
 }
 
 let lessons = loadLessons();
 
 function saveLessons(){
+  if(!canUseStorage) return false;
+
   try{
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(lessons));
-  }catch(e){}
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        lessons,
+        savedAt: new Date().toISOString()
+      })
+    );
+    return true;
+  }catch(e){
+    console.warn("Не удалось сохранить расположение:", e);
+    return false;
+  }
 }
 
 const body = document.getElementById("body");
@@ -551,6 +631,29 @@ function mondayOf(date){
 }
 
 
+const saveState = document.getElementById("saveState");
+
+function showSaveState(ok){
+  if(!saveState) return;
+
+  if(!canUseStorage){
+    saveState.textContent = "браузер не разрешил сохранение";
+    saveState.className = "save-state error";
+    return;
+  }
+
+  saveState.textContent = ok ? "сохранено" : "не удалось сохранить";
+  saveState.className = ok ? "save-state ok" : "save-state error";
+
+  if(ok){
+    window.clearTimeout(showSaveState._timer);
+    showSaveState._timer = window.setTimeout(() => {
+      saveState.textContent = "";
+      saveState.className = "save-state";
+    }, 1800);
+  }
+}
+
 function cellKeyFromElement(td){
   return `${td.dataset.week}-${td.dataset.day}-${td.dataset.timeIndex}`;
 }
@@ -567,7 +670,7 @@ function moveLesson(fromKey, toKey){
   if(target) lessons[fromKey] = target;
   else delete lessons[fromKey];
 
-  saveLessons();
+  showSaveState(saveLessons());
 
   const filter =
     document.querySelector("button[data-filter].active")?.dataset.filter || "all";
@@ -593,7 +696,7 @@ document.getElementById("editBtn").addEventListener("click", () => {
 
 document.getElementById("restoreScheduleBtn").addEventListener("click", () => {
   lessons = cloneLessons(defaultLessons);
-  saveLessons();
+  showSaveState(saveLessons());
   const filter =
     document.querySelector("button[data-filter].active")?.dataset.filter || "all";
   render(filter);
@@ -617,6 +720,16 @@ function clearDragMarks(){
     longPressTimer = null;
   }
 }
+
+window.addEventListener("beforeunload", () => {
+  saveLessons();
+});
+
+document.addEventListener("visibilitychange", () => {
+  if(document.visibilityState === "hidden"){
+    saveLessons();
+  }
+});
 
 /* Компьютер: обычное drag & drop */
 body.addEventListener("dragstart", (e) => {
@@ -805,6 +918,10 @@ openCurrentWeekAndDay();
 
 // Обновляем подсветку раз в минуту.
 setInterval(markTodayAndNow, 60_000);
+
+if(!canUseStorage){
+  showSaveState(false);
+}
 
 // PWA: установка, офлайн-кэш и запуск с главного экрана.
 let deferredInstallPrompt = null;
