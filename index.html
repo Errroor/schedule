@@ -149,6 +149,29 @@
       outline-offset:-3px;
       font-weight:400;
     }
+
+    /* Режим перестановки занятий */
+    body.edit-mode td[data-day]{
+      cursor:grab;
+      user-select:none;
+      -webkit-user-select:none;
+    }
+    body.edit-mode td[data-day]:active{cursor:grabbing}
+    body.edit-mode td.has-lesson{
+      box-shadow:inset 0 0 0 1px rgba(23,50,77,.18);
+    }
+    body.edit-mode td.drag-source{opacity:.45}
+    body.edit-mode td.drop-target{
+      outline:3px dashed #5d87a6;
+      outline-offset:-4px;
+    }
+    #editBtn.active{
+      background:#17324d;
+      color:#fff;
+      border-color:#17324d;
+    }
+    #restoreScheduleBtn{display:none}
+    body.edit-mode #restoreScheduleBtn{display:inline-block}
     .subject{font-weight:400}
     .meta{font-size:12px; margin-top:2px}
     .legend{
@@ -279,6 +302,9 @@
       button{
         min-height:42px;
       }
+      body.edit-mode td[data-day]{
+        touch-action:none;
+      }
       .table-wrap{
         overflow-x:auto;
         -webkit-overflow-scrolling:touch;
@@ -328,6 +354,8 @@
     <button id="currentBtn">Текущая неделя</button>
     <button id="resetBtn">Сбросить</button>
     <button id="installBtn">Установить приложение</button>
+    <button id="editBtn">Переставить занятия</button>
+    <button id="restoreScheduleBtn">Вернуть исходное расписание</button>
   </div>
   <div class="status"><span id="status"></span><span id="offlineBadge" class="offline-badge">офлайн</span></div>
 
@@ -351,7 +379,6 @@
     <span><i class="swatch lab"></i>лабораторная</span>
     <span><i class="swatch extra"></i>доп. занятие</span>
   </div>
-
 </div>
 
 <script>
@@ -380,7 +407,7 @@ const X = (subject, exactTime="", teacher="") => ({subject, exactTime, teacher, 
 
 // Данные с присланного изображения.
 // Ключ: "неделя-день-индекс_времени".
-const lessons = {
+const defaultLessons = {
   // 1 неделя
   "1-tue-1": S("Обработка и анализ данных","lecture","Ратманова И.Д.","Б014"),
   "1-thu-1": S("Технологии гибридных суперкомпьютерных вычислений","seminar","Чернышева Л.П.","Б326"),
@@ -398,7 +425,7 @@ const lessons = {
   "1-fri-4": S("Обработка и анализ данных","lab","Ратманова И.Д.","Б306"),
 
   "1-wed-4": X("Теоретическая и практическая грамматика","17:30","Ганина В.В."),
-  "1-mon-5": X("Практика устной речи","18:30","Кузьмина Р.В."),
+  "1-tue-4": X("Практика устной речи","17:30","Кузьмина Р.В."),
   "1-thu-5": X("Функциональная стилистика русского языка","18:30","Здорикова Ю.Н."),
   "1-wed-5": X("Лексикология английского языка","19:00","Ганина В.В."),
 
@@ -415,10 +442,32 @@ const lessons = {
   "2-thu-3": S("Мет. научн. исслед.","seminar","Пантелеев Е.Р.","Б310"),
 
   "2-wed-4": X("Теоретическая и практическая грамматика","17:30","Ганина В.В."),
-  "2-mon-5": X("Практика устной речи","18:30","Кузьмина Р.В."),
+  "2-tue-4": X("Практика устной речи","17:30","Кузьмина Р.В."),
   "2-thu-5": X("Функциональная стилистика русского языка","18:30","Здорикова Ю.Н."),
   "2-wed-5": X("Лексикология английского языка","19:00","Ганина В.В."),
 };
+
+const STORAGE_KEY = "schedule-custom-lessons-v2";
+
+function cloneLessons(source){
+  return JSON.parse(JSON.stringify(source));
+}
+
+function loadLessons(){
+  try{
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if(saved) return JSON.parse(saved);
+  }catch(e){}
+  return cloneLessons(defaultLessons);
+}
+
+let lessons = loadLessons();
+
+function saveLessons(){
+  try{
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(lessons));
+  }catch(e){}
+}
 
 const body = document.getElementById("body");
 const daysHead = document.getElementById("daysHead");
@@ -473,7 +522,7 @@ function render(filter="all"){
 
         const item = lessons[`${week}-${dayKey}-${ti}`];
         if (item) {
-          td.classList.add(item.type);
+          td.classList.add(item.type, "has-lesson");
           if (item.type === "extra") {
             const extraMeta = [item.exactTime, item.teacher].filter(Boolean).join(" · ");
             td.innerHTML = `<div class="subject">${item.subject}</div>
@@ -489,6 +538,7 @@ function render(filter="all"){
     });
   }
   markTodayAndNow();
+  updateDraggableCells();
 }
 
 function mondayOf(date){
@@ -499,6 +549,162 @@ function mondayOf(date){
   d.setHours(0,0,0,0);
   return d;
 }
+
+
+function cellKeyFromElement(td){
+  return `${td.dataset.week}-${td.dataset.day}-${td.dataset.timeIndex}`;
+}
+
+function moveLesson(fromKey, toKey){
+  if(!fromKey || !toKey || fromKey === toKey) return;
+
+  const moving = lessons[fromKey];
+  if(!moving) return;
+
+  const target = lessons[toKey];
+  lessons[toKey] = moving;
+
+  if(target) lessons[fromKey] = target;
+  else delete lessons[fromKey];
+
+  saveLessons();
+
+  const filter =
+    document.querySelector("button[data-filter].active")?.dataset.filter || "all";
+  render(filter);
+}
+
+let editMode = false;
+let dragSourceKey = null;
+let pointerDragging = false;
+let longPressTimer = null;
+
+function setEditMode(enabled){
+  editMode = enabled;
+  document.body.classList.toggle("edit-mode", enabled);
+  const btn = document.getElementById("editBtn");
+  btn.classList.toggle("active", enabled);
+  btn.textContent = enabled ? "Готово" : "Переставить занятия";
+}
+
+document.getElementById("editBtn").addEventListener("click", () => {
+  setEditMode(!editMode);
+});
+
+document.getElementById("restoreScheduleBtn").addEventListener("click", () => {
+  lessons = cloneLessons(defaultLessons);
+  saveLessons();
+  const filter =
+    document.querySelector("button[data-filter].active")?.dataset.filter || "all";
+  render(filter);
+});
+
+function updateDraggableCells(){
+  document.querySelectorAll("td[data-day]").forEach(td => {
+    const key = cellKeyFromElement(td);
+    td.draggable = !!lessons[key];
+  });
+}
+
+function clearDragMarks(){
+  document.querySelectorAll(".drag-source,.drop-target").forEach(el => {
+    el.classList.remove("drag-source","drop-target");
+  });
+  dragSourceKey = null;
+  pointerDragging = false;
+  if(longPressTimer){
+    clearTimeout(longPressTimer);
+    longPressTimer = null;
+  }
+}
+
+/* Компьютер: обычное drag & drop */
+body.addEventListener("dragstart", (e) => {
+  if(!editMode){
+    e.preventDefault();
+    return;
+  }
+  const td = e.target.closest("td[data-day]");
+  if(!td) return;
+  const key = cellKeyFromElement(td);
+  if(!lessons[key]){
+    e.preventDefault();
+    return;
+  }
+  dragSourceKey = key;
+  td.classList.add("drag-source");
+  e.dataTransfer.effectAllowed = "move";
+  e.dataTransfer.setData("text/plain", key);
+});
+
+body.addEventListener("dragover", (e) => {
+  if(!editMode || !dragSourceKey) return;
+  const td = e.target.closest("td[data-day]");
+  if(!td) return;
+  e.preventDefault();
+  document.querySelectorAll(".drop-target").forEach(el => el.classList.remove("drop-target"));
+  td.classList.add("drop-target");
+});
+
+body.addEventListener("drop", (e) => {
+  if(!editMode) return;
+  const td = e.target.closest("td[data-day]");
+  if(!td) return;
+  e.preventDefault();
+  const fromKey = dragSourceKey || e.dataTransfer.getData("text/plain");
+  const toKey = cellKeyFromElement(td);
+  clearDragMarks();
+  moveLesson(fromKey, toKey);
+});
+
+body.addEventListener("dragend", clearDragMarks);
+
+/* Android/touch: удержать занятие примерно 250 мс и перетащить пальцем */
+body.addEventListener("pointerdown", (e) => {
+  if(!editMode || e.pointerType === "mouse") return;
+  const td = e.target.closest("td[data-day]");
+  if(!td) return;
+  const key = cellKeyFromElement(td);
+  if(!lessons[key]) return;
+
+  dragSourceKey = key;
+  longPressTimer = setTimeout(() => {
+    pointerDragging = true;
+    td.classList.add("drag-source");
+  }, 250);
+});
+
+body.addEventListener("pointermove", (e) => {
+  if(!editMode || !pointerDragging) return;
+  e.preventDefault();
+  const target = document.elementFromPoint(e.clientX, e.clientY)?.closest("td[data-day]");
+  document.querySelectorAll(".drop-target").forEach(el => el.classList.remove("drop-target"));
+  if(target) target.classList.add("drop-target");
+}, {passive:false});
+
+body.addEventListener("pointerup", (e) => {
+  if(!editMode) return;
+
+  if(longPressTimer){
+    clearTimeout(longPressTimer);
+    longPressTimer = null;
+  }
+
+  if(!pointerDragging){
+    clearDragMarks();
+    return;
+  }
+
+  const target = document.elementFromPoint(e.clientX, e.clientY)?.closest("td[data-day]");
+  const fromKey = dragSourceKey;
+  const toKey = target ? cellKeyFromElement(target) : null;
+
+  clearDragMarks();
+  if(fromKey && toKey) moveLesson(fromKey, toKey);
+});
+
+body.addEventListener("pointercancel", clearDragMarks);
+
 
 function currentScheduleWeek(date=new Date()){
   const semesterStart = new Date(2026,8,15); // 15.09.2026, вторник 2 недели
